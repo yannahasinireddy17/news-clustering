@@ -1,0 +1,10 @@
+Flask==3.0.3
+python-dotenv==1.0.1
+trafilatura==2.0.0
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.2
+sentence-transformers==3.0.1
+sumy==0.11.0
+# Optional density clustering (fast fallback to KMeans available)
+hdbscan==0.8.32

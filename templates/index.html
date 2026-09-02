@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Event-Based News Clustering</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Semantic News Intelligence</p>
+          <h1>News Event Clusters</h1>
+          {% if not query and not latest %}
+          <p class="landing-copy">Discover what's happening and how different sources<br class="landing-break" /> are covering the same event.</p>
+          {% endif %}
+        </div>
+        {% if query or latest %}
+        <div class="topbar-actions">
+          <div class="status-pill">{{ cluster_count }} clusters</div>
+        </div>
+        {% endif %}
+      </header>
+
+      <section class="filter-panel">
+        <form class="filter-form" method="get" action="/">
+          <label class="sr-only" for="topic-search">Search topic</label>
+          <input id="topic-search" name="q" type="text" value="{{ query or '' }}" placeholder="Search topic, e.g. ISRO, cricket, AI" />
+          <button id="search-button" type="submit">Search</button>
+          {% if query %}
+          <a class="clear-filter" href="/">Clear</a>
+          {% endif %}
+        </form>
+        <a class="latest-link" href="/?latest=1">Latest News</a>
+        {% if not query and not latest %}
+        <p class="latest-copy">Explore the latest stories from multiple real news sources.</p>
+        {% endif %}
+        {% if query %}
+        <p class="filter-result">Showing results for: <strong>{{ query }}</strong></p>
+        <div class="processing-status" id="processing-status" aria-live="polite">
+          <span class="processing-dot"></span>
+          <span id="processing-message">Searching live sources...</span>
+        </div>
+        {% endif %}
+      </section>
+
+      {% if retrieval_errors %}
+      <div class="notice notice-warning" role="status">
+        Live source warning: {{ retrieval_errors|join('; ') }}
+      </div>
+      {% endif %}
+
+      {% if query and not articles %}
+      <div class="notice notice-empty" role="status">
+        <strong>No articles found for &quot;{{ query }}&quot;.</strong>
+        <span>Try a broader topic or check the configured news sources.</span>
+      </div>
+      {% endif %}
+
+      {% if latest and not articles %}
+      <div class="notice notice-empty" role="status">
+        <strong>No current articles are available.</strong>
+        <span>Check the configured live news sources and try again.</span>
+      </div>
+      {% endif %}
+
+      {% if query or latest %}
+      <section class="stats-grid">
+        <div class="stat-card">
+          <span class="label">Articles</span>
+          <strong>{{ article_count }}</strong>
+        </div>
+        <div class="stat-card">
+          <span class="label">Clusters</span>
+          <strong>{{ cluster_count }}</strong>
+        </div>
+        <div class="stat-card">
+          <span class="label">Sources</span>
+          <strong>{{ source_count }}</strong>
+        </div>
+        <div class="stat-card">
+          <span class="label">Status</span>
+          <strong>Live</strong>
+        </div>
+      </section>
+      {% endif %}
+
+      {% if query or latest %}
+      <main class="content-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Event clusters</h2>
+          </div>
+          <div class="cluster-list">
+            {% for cluster in clusters %}
+            <article class="cluster-card">
+              <div class="cluster-topline">
+                <a class="cluster-name" href="{{ url_for('cluster_detail', cluster_id=cluster.cluster_id) }}">{{ cluster.title }}</a>
+                <span class="cluster-pill">{{ cluster.article_count }} articles</span>
+              </div>
+              <p class="cluster-summary">{{ cluster.summary }}</p>
+              <div class="cluster-meta">
+                <span>Sources: {{ cluster.source_count }}</span>
+                <span>{{ cluster.sources|join(', ') }}</span>
+              </div>
+            </article>
+            {% endfor %}
+            {% if not clusters and not query and not latest %}
+            <p class="empty-copy">Search for a topic or open Latest News to retrieve current articles.</p>
+            {% endif %}
+          </div>
+        </section>
+
+        <aside class="panel sidebar-panel">
+          <div class="panel-header">
+            <h2>Source list</h2>
+          </div>
+          <div class="source-grid">
+            {% for article in articles %}
+            <div class="source-card">
+              <h3>{{ article.source }}</h3>
+              <p>{{ article.title }}</p>
+            </div>
+            {% endfor %}
+          </div>
+        </aside>
+      </main>
+      {% endif %}
+    </div>
+    <script>
+      const searchForm = document.querySelector(".filter-form");
+      const searchButton = document.getElementById("search-button");
+      const processingMessage = document.getElementById("processing-message");
+      const processingMessages = [
+        "Searching live sources...",
+        "Preparing article embeddings...",
+        "Grouping related events...",
+        "Writing cluster summaries..."
+      ];
+
+      if (searchForm && searchButton) {
+        searchForm.addEventListener("submit", () => {
+          searchButton.disabled = true;
+          searchButton.textContent = "Processing...";
+          let messageIndex = 0;
+          const status = document.getElementById("processing-status");
+          if (status) {
+            status.classList.add("is-visible");
+            const updateMessage = () => {
+              if (processingMessage) {
+                processingMessage.textContent = processingMessages[messageIndex % processingMessages.length];
+              }
+              messageIndex += 1;
+            };
+            updateMessage();
+            window.setInterval(updateMessage, 900);
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

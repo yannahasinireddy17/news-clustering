@@ -1,0 +1,367 @@
+import os
+import re
+import logging
+from collections import defaultdict
+
+import nltk
+import numpy as np
+from flask import Flask, jsonify, render_template, request
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+from feeds import parse_rss_feed
+from article_extractor import ArticleExtractionError, extract_article_text
+from feeds_loader import fetch_articles_for_query, fetch_latest_articles
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency
+    load_dotenv = None
+
+app = Flask(__name__)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FEED_CONFIG_PATH = os.path.join(BASE_DIR, "data", "feeds.json")
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+CLUSTER_DISTANCE_THRESHOLD = 0.4
+
+
+if load_dotenv:
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+logger.info("[CONFIG] .env exists: %s", "YES" if os.path.exists(os.path.join(BASE_DIR, ".env")) else "NO")
+logger.info("[CONFIG] python-dotenv available: %s", "YES" if load_dotenv else "NO")
+logger.info("[CONFIG] NEWS_API_KEY loaded: %s", "YES" if os.getenv("NEWS_API_KEY") else "NO")
+
+
+def ensure_nltk_resources():
+    for resource in ["punkt", "punkt_tab"]:
+        try:
+            nltk.data.find(f"tokenizers/{resource}")
+        except LookupError:
+            nltk.download(resource, quiet=True)
+
+
+ensure_nltk_resources()
+
+
+def load_articles(path=None, query=None):
+    query = (query or "").strip()
+    if query:
+        articles, _ = fetch_articles_for_query(
+            query,
+            config_path=FEED_CONFIG_PATH,
+            max_articles=30,
+        )
+        if articles:
+            return articles
+        return []
+
+    articles, _ = fetch_latest_articles(
+        api_key=os.getenv("NEWS_API_KEY"),
+        config_path=FEED_CONFIG_PATH,
+        max_articles=30,
+    )
+    return articles
+
+
+def filter_articles_by_query(articles, query):
+    if not query:
+        return articles
+
+    keyword = query.strip().lower()
+    filtered = []
+    for article in articles:
+        text = " ".join([
+            article.get("title", ""),
+            article.get("content", ""),
+            article.get("source", "")
+        ]).lower()
+        if keyword in text:
+            filtered.append(article)
+    return filtered
+
+
+def clean_text(text):
+    if not text:
+        return ""
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text.lower()
+
+
+def generate_embeddings(texts):
+    if not texts:
+        return np.array([]).reshape((0, 0))
+
+    logger.info("[NLP] Generating embeddings for %d articles...", len(texts))
+    try:
+        model = SentenceTransformer(MODEL_NAME, device="cpu")
+        embeddings = model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
+        logger.info("[NLP] Embeddings generated: %d", len(embeddings))
+        return np.asarray(embeddings)
+    except Exception:
+        logger.warning("[NLP] SBERT unavailable; using TF-IDF fallback")
+        vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
+        matrix = vectorizer.fit_transform(texts)
+        return matrix.toarray()
+
+
+def generate_cluster_title(cluster_articles):
+    if not cluster_articles:
+        return "News Event"
+
+    combined_text = " ".join(
+        f"{article.get('title', '')} {article.get('content', '')}"
+        for article in cluster_articles
+    )
+
+    vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), max_features=8)
+    tfidf_matrix = vectorizer.fit_transform([combined_text])
+    feature_names = np.array(vectorizer.get_feature_names_out())
+    scores = tfidf_matrix.toarray()[0]
+
+    important_words = []
+    for word, score in sorted(zip(feature_names, scores), key=lambda item: item[1], reverse=True):
+        normalized = word.lower()
+        if len(normalized) <= 3 or normalized in {"news", "said", "would", "also", "from", "with", "into", "after", "over", "about", "new"}:
+            continue
+        important_words.append(word)
+        if len(important_words) >= 3:
+            break
+
+    if important_words:
+        return " ".join(word.capitalize() for word in important_words)
+
+    title = (cluster_articles[0].get("title") or "News Event").strip()
+    return title[:60].strip() or "News Event"
+
+
+def summarize_cluster(cluster_articles):
+    if not cluster_articles:
+        return "No articles available for summary."
+
+    sentences = []
+    for article in cluster_articles:
+        text = article.get("content", "")
+        raw_sentences = re.split(r"(?<=[.!?])\s+", text)
+        for sentence in raw_sentences:
+            sentence = sentence.strip()
+            if len(sentence) > 20:
+                sentences.append(sentence)
+
+    if not sentences:
+        return " ".join(article.get("content", "") for article in cluster_articles)[:300]
+
+    unique_sentences = []
+    seen = set()
+    for sentence in sentences:
+        norm = sentence.lower().strip()
+        if norm not in seen:
+            unique_sentences.append(sentence)
+            seen.add(norm)
+
+    if not unique_sentences:
+        return "No summary available."
+
+    vectorizer = TfidfVectorizer(stop_words="english")
+    tfidf_matrix = vectorizer.fit_transform(unique_sentences)
+    sentence_scores = tfidf_matrix.toarray().sum(axis=1)
+    ranked_indices = np.argsort(sentence_scores)[::-1][: min(3, len(unique_sentences))]
+    selected = [unique_sentences[index] for index in sorted(ranked_indices)]
+    summary = " ".join(selected)
+
+    if len(summary) > 250:
+        summary = summary[:247].rsplit(" ", 1)[0] + "..."
+
+    return summary
+
+
+def build_event_clusters(articles):
+    if not articles:
+        logger.info("[NLP] Articles clustered: 0; clusters created: 0")
+        return []
+
+    if all("event_label" in article for article in articles):
+        grouped = defaultdict(list)
+        for article in articles:
+            grouped[article.get("event_label", "unknown")].append(article)
+        clusters = []
+        for index, cluster_articles in enumerate(grouped.values(), start=1):
+            cluster_title = generate_cluster_title(cluster_articles)
+            summary = summarize_cluster(cluster_articles)
+            sources = sorted({article["source"] for article in cluster_articles})
+            clusters.append({
+                "cluster_id": index,
+                "name": cluster_title,
+                "title": cluster_title,
+                "number": index,
+                "summary": summary,
+                "article_count": len(cluster_articles),
+                "source_count": len(sources),
+                "sources": sources,
+                "articles": cluster_articles,
+                "source_articles": {
+                    source: [article for article in cluster_articles if article["source"] == source]
+                    for source in sources
+                },
+            })
+        return sorted(clusters, key=lambda cluster: cluster["title"].lower())
+
+    texts = [clean_text(f"{article.get('title', '')} {article.get('content', '')}") for article in articles]
+    embeddings = generate_embeddings(texts)
+
+    if len(articles) == 1:
+        labels = np.array([0])
+    else:
+        if embeddings.size == 0:
+            labels = np.array([0] * len(articles))
+        else:
+            clusterer = AgglomerativeClustering(
+                n_clusters=None,
+                distance_threshold=CLUSTER_DISTANCE_THRESHOLD,
+                metric="cosine",
+                linkage="average",
+            )
+            labels = clusterer.fit_predict(embeddings)
+
+    grouped = defaultdict(list)
+    for article, label in zip(articles, labels):
+        grouped[int(label)].append(article)
+
+    clusters = []
+    for index, cluster_articles in enumerate(grouped.values(), start=1):
+        cluster_title = generate_cluster_title(cluster_articles)
+        summary = summarize_cluster(cluster_articles)
+        sources = sorted({article["source"] for article in cluster_articles})
+        cluster = {
+            "cluster_id": index,
+            "name": cluster_title,
+            "title": cluster_title,
+            "number": index,
+            "summary": summary,
+            "article_count": len(cluster_articles),
+            "source_count": len(sources),
+            "sources": sources,
+            "articles": cluster_articles,
+            "source_articles": {
+                source: [article for article in cluster_articles if article["source"] == source]
+                for source in sources
+            },
+        }
+        clusters.append(cluster)
+
+    logger.info("[NLP] Articles clustered: %d; clusters created: %d", len(articles), len(clusters))
+    return sorted(clusters, key=lambda cluster: cluster["title"].lower())
+
+
+@app.route("/")
+def index():
+    query = request.args.get("q", "").strip()
+    latest = request.args.get("latest") == "1"
+    retrieval_errors = []
+    logger.info("[NEWS] Flask query received: %s", query or "<none>")
+    if query:
+        articles, retrieval_errors = fetch_articles_for_query(
+            query,
+            config_path=FEED_CONFIG_PATH,
+            max_articles=30,
+        )
+    elif latest:
+        articles, retrieval_errors = fetch_latest_articles(
+            api_key=os.getenv("NEWS_API_KEY"),
+            config_path=FEED_CONFIG_PATH,
+            max_articles=30,
+        )
+    else:
+        articles = []
+    clusters = build_event_clusters(articles)
+    source_names = sorted({article["source"] for article in articles})
+    return render_template(
+        "index.html",
+        articles=articles,
+        clusters=clusters,
+        article_count=len(articles),
+        cluster_count=len(clusters),
+        source_count=len(source_names),
+        query=query,
+        latest=latest,
+        retrieval_errors=retrieval_errors,
+    )
+
+
+@app.post("/api/summarize")
+def summarize_article_api():
+    payload = request.get_json(silent=True) or {}
+    url = (payload.get("url") or "").strip()
+    description = (payload.get("description") or "").strip()
+
+    try:
+        article_text = extract_article_text(url)
+        summary = summarize_cluster([{"content": article_text}])
+        return jsonify({"summary": summary, "basis": "Full article text"})
+    except ArticleExtractionError as error:
+        if description:
+            summary = summarize_cluster([{"content": description}])
+            return jsonify({
+                "summary": summary,
+                "basis": "Publisher description/snippet only; full article text was unavailable.",
+            })
+        return jsonify({"error": str(error)}), 422
+
+
+@app.route("/clusters")
+def clusters_api():
+    query = request.args.get("q", "").strip()
+    latest = request.args.get("latest") == "1"
+    if query:
+        articles, errors = fetch_articles_for_query(
+            query,
+            config_path=FEED_CONFIG_PATH,
+            max_articles=30,
+        )
+    elif latest:
+        articles, errors = fetch_latest_articles(
+            api_key=os.getenv("NEWS_API_KEY"),
+            config_path=FEED_CONFIG_PATH,
+            max_articles=30,
+        )
+    else:
+        articles, errors = [], ["A query or latest=1 is required"]
+    clusters = build_event_clusters(articles)
+    return jsonify({"articles": articles, "clusters": clusters, "errors": errors})
+
+
+@app.route("/cluster/<int:cluster_id>")
+def cluster_detail(cluster_id):
+    query = request.args.get("q", "").strip()
+    articles = load_articles(query=query)
+    cluster = next((item for item in build_event_clusters(articles) if item["cluster_id"] == cluster_id), None)
+    if cluster is None:
+        return "Cluster not found", 404
+    return render_template("cluster_detail.html", cluster=cluster)
+
+
+@app.route("/article/<article_id>")
+def article_detail(article_id):
+    query = request.args.get("q", "").strip()
+    articles = load_articles(query=query)
+    article = next((item for item in articles if item["article_id"] == article_id), None)
+    if article is None:
+        return "Article not found", 404
+
+    cluster = next((item for item in build_event_clusters(articles) if any(a["article_id"] == article_id for a in item["articles"])), None)
+    if cluster:
+        article["cluster_name"] = cluster["title"]
+    else:
+        article["cluster_name"] = "Unassigned"
+
+    return render_template("article.html", article=article)
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
