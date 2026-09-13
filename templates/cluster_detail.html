@@ -46,7 +46,7 @@
               <h3><a href="{{ url_for('article_detail', article_id=article.article_id) }}">{{ article.title }}</a></h3>
               <p class="meta-line">{{ article.published_date }}</p>
               <p>{{ article.description or article.content }}</p>
-              <button class="summarize-button" type="button" data-url="{{ article.url }}" data-description="{{ article.description or '' }}">Summarize Article</button>
+              <button class="summarize-button" type="button" data-url="{{ article.url }}" data-title="{{ article.title }}" data-description="{{ article.description or article.content or '' }}">Summarize Article</button>
               <p class="summary-result" aria-live="polite"></p>
               {% if article.url %}
               <p><a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">Read Original</a></p>
@@ -67,7 +67,7 @@
             const response = await fetch("{{ url_for('summarize_article_api') }}", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: button.dataset.url, description: button.dataset.description })
+              body: JSON.stringify({ url: button.dataset.url, title: button.dataset.title, description: button.dataset.description })
             });
             const data = await response.json();
             result.textContent = data.summary ? `${data.summary} (${data.basis})` : data.error;

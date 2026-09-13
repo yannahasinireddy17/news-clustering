@@ -27,7 +27,7 @@
           <div class="article-body">
             <p>{{ article.description or article.content }}</p>
           </div>
-          <button class="summarize-button" type="button" data-url="{{ article.url }}" data-description="{{ article.description or '' }}">Summarize Article</button>
+          <button class="summarize-button" type="button" data-url="{{ article.url }}" data-title="{{ article.title }}" data-description="{{ article.description or article.content or '' }}">Summarize Article</button>
           <p class="summary-result" aria-live="polite"></p>
           {% if article.url %}
           <p><a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">Read Original</a></p>
@@ -47,7 +47,7 @@
             const response = await fetch("{{ url_for('summarize_article_api') }}", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: summarizeButton.dataset.url, description: summarizeButton.dataset.description })
+              body: JSON.stringify({ url: summarizeButton.dataset.url, title: summarizeButton.dataset.title, description: summarizeButton.dataset.description })
             });
             const data = await response.json();
             summaryResult.textContent = data.summary ? `${data.summary} (${data.basis})` : data.error;

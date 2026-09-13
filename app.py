@@ -9,6 +9,7 @@ from flask import Flask, jsonify, render_template, request
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 from feeds import parse_rss_feed
 from article_extractor import ArticleExtractionError, extract_article_text
@@ -142,44 +143,57 @@ def generate_cluster_title(cluster_articles):
     return title[:60].strip() or "News Event"
 
 
+def _extractive_summary(text, title="", max_sentences=3, max_length=300):
+    source_text = " ".join(part.strip() for part in (title, text) if part and part.strip())
+    if len(source_text.split()) < 12:
+        return "Insufficient article text is available for a reliable summary."
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", source_text)
+        if len(sentence.strip().split()) >= 5
+    ]
+    if not sentences:
+        return "Insufficient article text is available for a reliable summary."
+    vectorizer = TfidfVectorizer(stop_words="english")
+    matrix = vectorizer.fit_transform(sentences)
+    scores = matrix.toarray().sum(axis=1)
+    selected = [sentences[index] for index in np.argsort(scores)[::-1][:max_sentences]]
+    summary = " ".join(selected)
+    if len(summary) > max_length:
+        summary = summary[: max_length - 3].rsplit(" ", 1)[0] + "..."
+    return summary
+
+
+def summarize_article(article_text, title=""):
+    """Create an extractive summary from one article only."""
+    return _extractive_summary(article_text, title=title, max_sentences=3)
+
+
+def select_related_articles(cluster_articles, similarity_threshold=0.6):
+    """Keep articles sufficiently close to their cluster's content centre."""
+    if len(cluster_articles) <= 1:
+        return cluster_articles
+    texts = [article.get("processed_text") or clean_text(
+        f"{article.get('title', '')} {article.get('content', '')}"
+    ) for article in cluster_articles]
+    if not any(texts):
+        return cluster_articles[:1]
+    matrix = TfidfVectorizer(stop_words="english").fit_transform(texts)
+    centre = np.asarray(matrix.mean(axis=0))
+    similarities = cosine_similarity(matrix, centre).ravel()
+    selected = [article for article, score in zip(cluster_articles, similarities) if score >= similarity_threshold]
+    return selected or [cluster_articles[int(np.argmax(similarities))]]
+
+
 def summarize_cluster(cluster_articles):
     if not cluster_articles:
         return "No articles available for summary."
-
-    sentences = []
-    for article in cluster_articles:
-        text = article.get("content", "")
-        raw_sentences = re.split(r"(?<=[.!?])\s+", text)
-        for sentence in raw_sentences:
-            sentence = sentence.strip()
-            if len(sentence) > 20:
-                sentences.append(sentence)
-
-    if not sentences:
-        return " ".join(article.get("content", "") for article in cluster_articles)[:300]
-
-    unique_sentences = []
-    seen = set()
-    for sentence in sentences:
-        norm = sentence.lower().strip()
-        if norm not in seen:
-            unique_sentences.append(sentence)
-            seen.add(norm)
-
-    if not unique_sentences:
-        return "No summary available."
-
-    vectorizer = TfidfVectorizer(stop_words="english")
-    tfidf_matrix = vectorizer.fit_transform(unique_sentences)
-    sentence_scores = tfidf_matrix.toarray().sum(axis=1)
-    ranked_indices = np.argsort(sentence_scores)[::-1][: min(3, len(unique_sentences))]
-    selected = [unique_sentences[index] for index in sorted(ranked_indices)]
-    summary = " ".join(selected)
-
-    if len(summary) > 250:
-        summary = summary[:247].rsplit(" ", 1)[0] + "..."
-
-    return summary
+    related = select_related_articles(cluster_articles)
+    source_text = " ".join(
+        f"{article.get('title', '')}. {article.get('content', '')}"
+        for article in related
+    )
+    return _extractive_summary(source_text, max_sentences=min(3, len(related) + 1))
 
 
 def build_event_clusters(articles, use_saved_model=False, pipeline_result=None):
@@ -307,11 +321,11 @@ def summarize_article_api():
 
     try:
         article_text = extract_article_text(url)
-        summary = summarize_cluster([{"content": article_text}])
+        summary = summarize_article(article_text, title=payload.get("title", ""))
         return jsonify({"summary": summary, "basis": "Full article text"})
     except ArticleExtractionError as error:
         if description:
-            summary = summarize_cluster([{"content": description}])
+            summary = summarize_article(description, title=payload.get("title", ""))
             return jsonify({
                 "summary": summary,
                 "basis": "Publisher description/snippet only; full article text was unavailable.",

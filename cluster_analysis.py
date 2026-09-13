@@ -6,12 +6,14 @@ import numpy as np
 
 
 TOPIC_KEYWORDS = {
-    "World": {"world", "country", "international", "government", "war", "conflict", "president"},
+    "World": {"world", "country", "international", "war", "conflict", "border", "refugee", "diplomatic"},
     "Technology": {"ai", "software", "technology", "chip", "cloud", "data", "internet"},
     "Business": {"business", "market", "company", "investment", "economy", "trade", "stock"},
     "Sports": {"sports", "game", "team", "match", "player", "league", "cricket", "football"},
-    "Politics": {"government", "president", "minister", "election", "policy", "parliament", "politics"},
+    "Politics": {"government", "president", "minister", "election", "policy", "parliament", "politics", "senate", "congress"},
     "Entertainment": {"film", "movie", "music", "actor", "show", "entertainment", "celebrity"},
+    "Science / Space / NASA": {"science", "scientist", "space", "nasa", "planet", "mars", "satellite", "astronomy", "research"},
+    "Health": {"health", "medical", "medicine", "hospital", "doctor", "disease", "cancer", "patient", "drug", "vaccine"},
 }
 
 

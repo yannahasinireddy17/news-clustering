@@ -1,3 +1,4 @@
+from app import select_related_articles, summarize_article, summarize_cluster
 from cluster_analysis import analyze_cluster
 from news_pipeline import run_news_pipeline
 from preprocessing import preprocess_text
@@ -36,3 +37,36 @@ def test_cluster_analysis_returns_keywords_and_topic_label():
 
     assert label == "Politics"
     assert keywords[:2] == ["policy", "government"]
+
+
+def test_individual_summary_uses_only_selected_article():
+    summary = summarize_article(
+        "The Mars mission sent new images to scientists. The images will support future research.",
+        title="NASA Mars mission update",
+    )
+
+    assert "Mars" in summary
+    assert "unrelated election" not in summary
+
+
+def test_cluster_summary_filters_unrelated_article():
+    articles = [
+        {"title": "Storm reaches coast", "content": "A storm reached the coast and caused flooding.", "processed_text": "storm reached coast caused flooding"},
+        {"title": "Flooding closes roads", "content": "Flooding from the storm closed roads near the coast.", "processed_text": "flooding storm closed roads coast"},
+        {"title": "Football final begins", "content": "The football final begins tonight at the national stadium.", "processed_text": "football final begins tonight national stadium"},
+    ]
+
+    related = select_related_articles(articles)
+    summary = summarize_cluster(articles)
+
+    assert len(related) == 2
+    assert "storm" in summary.lower() or "flood" in summary.lower()
+    assert "football" not in summary.lower()
+
+
+def test_extended_topic_labels_are_supported():
+    health, _ = analyze_cluster([{"processed_text": "doctor patient hospital vaccine disease"}])
+    science, _ = analyze_cluster([{"processed_text": "nasa space mars satellite research"}])
+
+    assert health == "Health"
+    assert science == "Science / Space / NASA"
