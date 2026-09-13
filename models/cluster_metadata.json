@@ -1,0 +1,57 @@
+{
+  "cluster_info": {
+    "0": {
+      "label": "Business",
+      "keywords": [
+        "new",
+        "reuters",
+        "year",
+        "oil",
+        "game",
+        "microsoft",
+        "company",
+        "quot"
+      ]
+    },
+    "1": {
+      "label": "Politics",
+      "keywords": [
+        "iraq",
+        "afp",
+        "reuters",
+        "killed",
+        "iraqi",
+        "minister",
+        "palestinian",
+        "said"
+      ]
+    },
+    "2": {
+      "label": "Sports",
+      "keywords": [
+        "ap",
+        "ap ap",
+        "bush",
+        "game",
+        "said",
+        "kerry",
+        "new",
+        "year"
+      ]
+    },
+    "3": {
+      "label": "Business",
+      "keywords": [
+        "lt",
+        "gt",
+        "lt gt",
+        "gt lt",
+        "stock",
+        "lt href",
+        "href",
+        "quickinfo"
+      ]
+    }
+  },
+  "n_clusters": 4
+}

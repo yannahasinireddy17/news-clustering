@@ -362,6 +362,49 @@ h1 {
   font-size: 0.8rem;
 }
 
+.visualization-panel,
+.metrics-panel {
+  margin-bottom: 24px;
+}
+
+.visualization-panel .meta-line {
+  margin: 6px 0 0;
+}
+
+.cluster-plot {
+  position: relative;
+  min-height: 300px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(rgba(102, 217, 239, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(102, 217, 239, 0.05) 1px, transparent 1px),
+    #0b1728;
+  background-size: 10% 20%;
+  overflow: hidden;
+}
+
+.cluster-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--primary);
+  box-shadow: 0 0 0 2px rgba(102, 217, 239, 0.18);
+}
+
+.cluster-dot-1 { background: var(--accent); }
+.cluster-dot-2 { background: #f9d79a; }
+.cluster-dot-3 { background: #f28b82; }
+.cluster-dot-4 { background: var(--secondary); }
+
+.metrics-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  color: var(--muted);
+}
+
 .comparison-panel {
   margin-bottom: 24px;
 }

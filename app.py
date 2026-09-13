@@ -13,6 +13,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from feeds import parse_rss_feed
 from article_extractor import ArticleExtractionError, extract_article_text
 from feeds_loader import fetch_articles_for_query, fetch_latest_articles
+from news_pipeline import run_news_pipeline, run_saved_pipeline
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -181,12 +182,12 @@ def summarize_cluster(cluster_articles):
     return summary
 
 
-def build_event_clusters(articles):
+def build_event_clusters(articles, use_saved_model=False, pipeline_result=None):
     if not articles:
         logger.info("[NLP] Articles clustered: 0; clusters created: 0")
         return []
 
-    if all("event_label" in article for article in articles):
+    if all("event_label" in article for article in articles) and not use_saved_model:
         grouped = defaultdict(list)
         for article in articles:
             grouped[article.get("event_label", "unknown")].append(article)
@@ -212,26 +213,14 @@ def build_event_clusters(articles):
             })
         return sorted(clusters, key=lambda cluster: cluster["title"].lower())
 
-    texts = [clean_text(f"{article.get('title', '')} {article.get('content', '')}") for article in articles]
-    embeddings = generate_embeddings(texts)
-
-    if len(articles) == 1:
-        labels = np.array([0])
-    else:
-        if embeddings.size == 0:
-            labels = np.array([0] * len(articles))
-        else:
-            clusterer = AgglomerativeClustering(
-                n_clusters=None,
-                distance_threshold=CLUSTER_DISTANCE_THRESHOLD,
-                metric="cosine",
-                linkage="average",
-            )
-            labels = clusterer.fit_predict(embeddings)
-
+    if pipeline_result is None:
+        pipeline_result = run_saved_pipeline(articles) if use_saved_model else run_news_pipeline(articles)
     grouped = defaultdict(list)
-    for article, label in zip(articles, labels):
-        grouped[int(label)].append(article)
+    cluster_metadata = {}
+    for pipeline_cluster in pipeline_result["clusters"]:
+        cluster_metadata[pipeline_cluster["cluster_id"] - 1] = pipeline_cluster
+        for article in pipeline_cluster["articles"]:
+            grouped[article["cluster_label"]].append(article)
 
     clusters = []
     for index, cluster_articles in enumerate(grouped.values(), start=1):
@@ -252,6 +241,11 @@ def build_event_clusters(articles):
                 source: [article for article in cluster_articles if article["source"] == source]
                 for source in sources
             },
+            "label": cluster_metadata.get(index - 1, {}).get("label", "News"),
+            "keywords": cluster_metadata.get(index - 1, {}).get("keywords", []),
+            "silhouette_score": pipeline_result["metrics"]["silhouette_score"],
+            "davies_bouldin_score": pipeline_result["metrics"]["davies_bouldin_score"],
+            "model_used": pipeline_result.get("model_used", "dynamic_pipeline"),
         }
         clusters.append(cluster)
 
@@ -262,7 +256,7 @@ def build_event_clusters(articles):
 @app.route("/")
 def index():
     query = request.args.get("q", "").strip()
-    latest = request.args.get("latest") == "1"
+    latest = request.args.get("latest") == "1" or not query
     retrieval_errors = []
     logger.info("[NEWS] Flask query received: %s", query or "<none>")
     if query:
@@ -278,8 +272,16 @@ def index():
             max_articles=30,
         )
     else:
-        articles = []
-    clusters = build_event_clusters(articles)
+        articles, retrieval_errors = fetch_latest_articles(
+            api_key=os.getenv("NEWS_API_KEY"),
+            config_path=FEED_CONFIG_PATH,
+            max_articles=30,
+        )
+    pipeline = run_saved_pipeline(articles) if articles else {
+        "metrics": {"silhouette_score": None, "davies_bouldin_score": None},
+        "visualization": [],
+    }
+    clusters = build_event_clusters(articles, use_saved_model=True, pipeline_result=pipeline)
     source_names = sorted({article["source"] for article in articles})
     return render_template(
         "index.html",
@@ -291,6 +293,9 @@ def index():
         query=query,
         latest=latest,
         retrieval_errors=retrieval_errors,
+        metrics=pipeline["metrics"],
+        visualization=pipeline["visualization"],
+        model_used=pipeline.get("model_used", "dynamic_pipeline"),
     )
 
 
@@ -332,15 +337,21 @@ def clusters_api():
         )
     else:
         articles, errors = [], ["A query or latest=1 is required"]
-    clusters = build_event_clusters(articles)
-    return jsonify({"articles": articles, "clusters": clusters, "errors": errors})
+    clusters = build_event_clusters(articles, use_saved_model=True)
+    response = {"articles": articles, "clusters": clusters, "errors": errors}
+    if articles:
+        pipeline = run_saved_pipeline(articles)
+        response["metrics"] = pipeline["metrics"]
+        response["visualization"] = pipeline["visualization"]
+        response["model_used"] = pipeline["model_used"]
+    return jsonify(response)
 
 
 @app.route("/cluster/<int:cluster_id>")
 def cluster_detail(cluster_id):
     query = request.args.get("q", "").strip()
     articles = load_articles(query=query)
-    cluster = next((item for item in build_event_clusters(articles) if item["cluster_id"] == cluster_id), None)
+    cluster = next((item for item in build_event_clusters(articles, use_saved_model=True) if item["cluster_id"] == cluster_id), None)
     if cluster is None:
         return "Cluster not found", 404
     return render_template("cluster_detail.html", cluster=cluster)
@@ -354,7 +365,7 @@ def article_detail(article_id):
     if article is None:
         return "Article not found", 404
 
-    cluster = next((item for item in build_event_clusters(articles) if any(a["article_id"] == article_id for a in item["articles"])), None)
+    cluster = next((item for item in build_event_clusters(articles, use_saved_model=True) if any(a["article_id"] == article_id for a in item["articles"])), None)
     if cluster:
         article["cluster_name"] = cluster["title"]
     else:

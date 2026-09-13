@@ -126,6 +126,26 @@
           </div>
         </aside>
       </main>
+      {% if visualization %}
+      <section class="panel visualization-panel">
+        <div class="panel-header">
+          <h2>PCA cluster visualization</h2>
+          <p class="meta-line">Each point represents an article after TF-IDF projection.</p>
+        </div>
+        <div class="cluster-plot" id="cluster-plot" aria-label="PCA cluster visualization"></div>
+      </section>
+      {% endif %}
+      {% if metrics %}
+      <section class="panel metrics-panel">
+        <div class="panel-header">
+          <h2>Clustering evaluation</h2>
+        </div>
+        <div class="metrics-list">
+          <span>Silhouette: {{ metrics.silhouette_score if metrics.silhouette_score is not none else 'n/a' }}</span>
+          <span>Davies-Bouldin: {{ metrics.davies_bouldin_score if metrics.davies_bouldin_score is not none else 'n/a' }}</span>
+        </div>
+      </section>
+      {% endif %}
       {% endif %}
     </div>
     <script>
@@ -156,6 +176,25 @@
             updateMessage();
             window.setInterval(updateMessage, 900);
           }
+        });
+      }
+
+      const plot = document.getElementById("cluster-plot");
+      const points = {{ visualization|default([])|tojson }};
+      if (plot && points.length) {
+        const xValues = points.map((point) => point.x);
+        const yValues = points.map((point) => point.y);
+        const minX = Math.min(...xValues);
+        const maxX = Math.max(...xValues);
+        const minY = Math.min(...yValues);
+        const maxY = Math.max(...yValues);
+        points.forEach((point) => {
+          const dot = document.createElement("span");
+          dot.className = "cluster-dot cluster-dot-" + (point.cluster % 5);
+          dot.title = "Cluster " + (point.cluster + 1);
+          dot.style.left = `${((point.x - minX) / (maxX - minX || 1)) * 94 + 3}%`;
+          dot.style.top = `${(1 - (point.y - minY) / (maxY - minY || 1)) * 84 + 8}%`;
+          plot.appendChild(dot);
         });
       }
     </script>

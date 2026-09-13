@@ -23,8 +23,12 @@
             <span class="cluster-pill">{{ cluster.article_count }} related articles</span>
           </div>
           <h2>{{ cluster.title }}</h2>
+          <p class="meta-line">Topic label: {{ cluster.label }}{% if cluster.keywords %} | Keywords: {{ cluster.keywords|join(', ') }}{% endif %}</p>
           <h3>Combined summary</h3>
           <p class="cluster-summary">{{ cluster.summary }}</p>
+          {% if cluster.silhouette_score is not none %}
+          <p class="meta-line">Silhouette score: {{ cluster.silhouette_score }} | Davies-Bouldin score: {{ cluster.davies_bouldin_score }}</p>
+          {% endif %}
           <p><a href="/">← Back to dashboard</a></p>
         </section>
 
