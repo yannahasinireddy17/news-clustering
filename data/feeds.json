@@ -1,14 +1,126 @@
-[
-  {
-    "name": "BBC News",
-    "url": "https://feeds.bbci.co.uk/news/rss.xml"
-  },
-  {
-    "name": "NPR News",
-    "url": "https://feeds.npr.org/1001/rss.xml"
-  },
-  {
-    "name": "NASA News",
-    "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss"
+{
+  "general": [
+    {
+      "name": "BBC News",
+      "url": "https://feeds.bbci.co.uk/news/rss.xml"
+    },
+    {
+      "name": "NPR News",
+      "url": "https://feeds.npr.org/1001/rss.xml"
+    },
+    {
+      "name": "NASA News",
+      "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss"
+    }
+  ],
+  "categories": {
+    "cricket": [
+      {
+        "name": "BBC Sport Cricket",
+        "url": "https://feeds.bbci.co.uk/sport/cricket/rss.xml",
+        "category": "cricket"
+      },
+      {
+        "name": "ESPN Cricinfo",
+        "url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml",
+        "category": "cricket"
+      }
+    ],
+    "football": [
+      {
+        "name": "BBC Sport Football",
+        "url": "https://feeds.bbci.co.uk/sport/football/rss.xml",
+        "category": "football"
+      }
+    ],
+    "sports": [
+      {
+        "name": "BBC Sport",
+        "url": "https://feeds.bbci.co.uk/sport/rss.xml",
+        "category": "sports"
+      },
+      {
+        "name": "NPR Sports",
+        "url": "https://feeds.npr.org/1055/rss.xml",
+        "category": "sports"
+      }
+    ],
+    "technology": [
+      {
+        "name": "BBC Technology",
+        "url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
+        "category": "technology"
+      },
+      {
+        "name": "NPR Technology",
+        "url": "https://feeds.npr.org/1019/rss.xml",
+        "category": "technology"
+      }
+    ],
+    "science": [
+      {
+        "name": "NASA News",
+        "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+        "category": "science"
+      },
+      {
+        "name": "BBC Science",
+        "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+        "category": "science"
+      },
+      {
+        "name": "NPR Science",
+        "url": "https://feeds.npr.org/1007/rss.xml",
+        "category": "science"
+      }
+    ],
+    "business": [
+      {
+        "name": "BBC Business",
+        "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "category": "business"
+      },
+      {
+        "name": "NPR Business",
+        "url": "https://feeds.npr.org/1006/rss.xml",
+        "category": "business"
+      }
+    ],
+    "entertainment": [
+      {
+        "name": "BBC Entertainment",
+        "url": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml",
+        "category": "entertainment"
+      },
+      {
+        "name": "NPR Arts & Culture",
+        "url": "https://feeds.npr.org/1008/rss.xml",
+        "category": "entertainment"
+      }
+    ],
+    "health": [
+      {
+        "name": "BBC Health",
+        "url": "https://feeds.bbci.co.uk/news/health/rss.xml",
+        "category": "health"
+      },
+      {
+        "name": "NPR Health",
+        "url": "https://feeds.npr.org/1128/rss.xml",
+        "category": "health"
+      }
+    ],
+    "politics": [
+      {
+        "name": "BBC Politics",
+        "url": "https://feeds.bbci.co.uk/news/politics/rss.xml",
+        "category": "politics"
+      },
+      {
+        "name": "NPR Politics",
+        "url": "https://feeds.npr.org/1014/rss.xml",
+        "category": "politics"
+      }
+    ]
   }
-]
+}

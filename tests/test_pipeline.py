@@ -49,6 +49,29 @@ def test_filter_articles_by_query_matches_topic_terms():
     assert "ISRO" in filtered[0]["title"]
 
 
+def test_filter_articles_by_query_ignores_ai_in_url_campaign_param():
+    articles = [
+        {
+            "title": "Pubs trial digital ID apps",
+            "content": "Venues may accept digital identity apps.",
+            "source": "BBC Technology",
+            "category": "technology",
+            "url": "https://www.bbc.co.uk/news/articles/cm4gl6j53w19o?at_campaign=rss",
+        },
+        {
+            "title": "What is AI and how does it work?",
+            "content": "Artificial intelligence systems are expanding quickly.",
+            "source": "BBC Technology",
+            "category": "technology",
+            "url": "https://www.bbc.co.uk/news/articles/c2l799gxjjpo?at_campaign=rss",
+        },
+    ]
+
+    filtered = filter_articles_by_query(articles, "AI")
+    assert len(filtered) == 1
+    assert "AI" in filtered[0]["title"]
+
+
 def test_build_event_clusters_uses_similarity_threshold_not_fixed_cluster_count():
   articles = [
     {"article_id": f"s{i}", "title": f"AI chip investment round {i}", "content": "Large technology firms are increasing investment in AI chips and cloud and data center expansion.", "source": "Reuters"}
@@ -78,6 +101,23 @@ def test_query_retrieval_prefers_newsapi_when_configured(monkeypatch):
     assert articles[0]["url"] == expected[0]["url"]
     assert articles[0]["content"] == expected[0]["title"]
     assert errors == []
+
+
+def test_query_rss_fallback_returns_only_matching_articles(monkeypatch):
+    monkeypatch.delenv("NEWS_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "feeds_loader.load_live_articles",
+        lambda *args, **kwargs: ([
+            {"title": "Cricket final reaches last over", "content": "The cricket match went to the final over.", "source": "BBC", "url": "https://www.bbc.com/sport/cricket"},
+            {"title": "Technology earnings rise", "content": "Software companies reported stronger earnings.", "source": "BBC", "url": "https://www.bbc.com/news/technology"},
+        ], []),
+    )
+
+    articles, errors = fetch_articles_for_query("cricket", config_path="unused")
+
+    assert [article["title"] for article in articles] == ["Cricket final reaches last over"]
+    assert articles[0]["url"].endswith("/cricket")
+    assert errors == ["NEWS_API_KEY is not configured; using RSS fallback"]
 
 
 def test_clusters_endpoint_returns_retrieval_errors(monkeypatch):

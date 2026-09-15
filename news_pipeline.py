@@ -80,6 +80,23 @@ def run_news_pipeline(articles):
     return _build_result(processed, features, labels)
 
 
+def refine_live_labels(articles, coarse_labels):
+    """Refine coarse saved-model buckets using each article's topic evidence."""
+    topic_ids = {}
+    refined = []
+    for article in articles:
+        topic, _ = analyze_cluster([article])
+        key = topic if topic != "News" else "News"
+        topic_ids.setdefault(key, len(topic_ids))
+        refined.append(topic_ids[key])
+    logger.info(
+        "[NLP] Live content refinement: %d coarse clusters -> %d topic clusters",
+        len(set(int(label) for label in coarse_labels)),
+        len(set(refined)),
+    )
+    return np.asarray(refined, dtype=int)
+
+
 def train_ag_news_pipeline(train_path, test_path, model_dir=DEFAULT_MODEL_DIR, n_clusters=4, max_features=20000):
     """Fit K-Means on Title+Description text only and persist reusable artifacts."""
     train_frame = pd.read_csv(train_path)
@@ -163,8 +180,9 @@ def run_saved_pipeline(articles, model_dir=DEFAULT_MODEL_DIR):
     vectorizer, model, cluster_info = saved
     processed = preprocess_articles(articles)
     features = vectorizer.transform([article.get("processed_text", "") for article in processed])
-    labels = model.predict(features)
-    result = _build_result(processed, features, labels, cluster_info)
-    result["model_used"] = "saved_ag_news_kmeans"
+    coarse_labels = model.predict(features)
+    labels = refine_live_labels(processed, coarse_labels)
+    result = _build_result(processed, features, labels)
+    result["model_used"] = "saved_ag_news_kmeans+content_refinement"
     logger.info("[NLP] Saved model cluster assignments: %d clusters", len(result["clusters"]))
     return result

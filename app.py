@@ -6,14 +6,13 @@ from collections import defaultdict
 import nltk
 import numpy as np
 from flask import Flask, jsonify, render_template, request
-from sentence_transformers import SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from feeds import parse_rss_feed
 from article_extractor import ArticleExtractionError, extract_article_text
-from feeds_loader import fetch_articles_for_query, fetch_latest_articles
+from feeds_loader import fetch_articles_for_query, fetch_latest_articles, filter_articles_by_query
 from news_pipeline import run_news_pipeline, run_saved_pipeline
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -50,8 +49,15 @@ def ensure_nltk_resources():
 ensure_nltk_resources()
 
 
+_ARTICLE_CACHE = {}
+
+
 def load_articles(path=None, query=None):
     query = (query or "").strip()
+    cache_key = f"q:{query.lower()}" if query else "latest"
+    if cache_key in _ARTICLE_CACHE:
+        return _ARTICLE_CACHE[cache_key]
+
     if query:
         articles, _ = fetch_articles_for_query(
             query,
@@ -59,6 +65,9 @@ def load_articles(path=None, query=None):
             max_articles=30,
         )
         if articles:
+            _ARTICLE_CACHE[cache_key] = articles
+            for a in articles:
+                _ARTICLE_CACHE[f"id:{a['article_id']}"] = a
             return articles
         return []
 
@@ -67,24 +76,11 @@ def load_articles(path=None, query=None):
         config_path=FEED_CONFIG_PATH,
         max_articles=30,
     )
+    if articles:
+        _ARTICLE_CACHE[cache_key] = articles
+        for a in articles:
+            _ARTICLE_CACHE[f"id:{a['article_id']}"] = a
     return articles
-
-
-def filter_articles_by_query(articles, query):
-    if not query:
-        return articles
-
-    keyword = query.strip().lower()
-    filtered = []
-    for article in articles:
-        text = " ".join([
-            article.get("title", ""),
-            article.get("content", ""),
-            article.get("source", "")
-        ]).lower()
-        if keyword in text:
-            filtered.append(article)
-    return filtered
 
 
 def clean_text(text):
@@ -102,6 +98,7 @@ def generate_embeddings(texts):
 
     logger.info("[NLP] Generating embeddings for %d articles...", len(texts))
     try:
+        from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(MODEL_NAME, device="cpu")
         embeddings = model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
         logger.info("[NLP] Embeddings generated: %d", len(embeddings))
@@ -279,18 +276,28 @@ def index():
             config_path=FEED_CONFIG_PATH,
             max_articles=30,
         )
+        cache_key = f"q:{query.lower()}"
+        _ARTICLE_CACHE[cache_key] = articles
+        for a in articles:
+            _ARTICLE_CACHE[f"id:{a['article_id']}"] = a
     elif latest:
         articles, retrieval_errors = fetch_latest_articles(
             api_key=os.getenv("NEWS_API_KEY"),
             config_path=FEED_CONFIG_PATH,
             max_articles=30,
         )
+        _ARTICLE_CACHE["latest"] = articles
+        for a in articles:
+            _ARTICLE_CACHE[f"id:{a['article_id']}"] = a
     else:
         articles, retrieval_errors = fetch_latest_articles(
             api_key=os.getenv("NEWS_API_KEY"),
             config_path=FEED_CONFIG_PATH,
             max_articles=30,
         )
+        _ARTICLE_CACHE["latest"] = articles
+        for a in articles:
+            _ARTICLE_CACHE[f"id:{a['article_id']}"] = a
     pipeline = run_saved_pipeline(articles) if articles else {
         "metrics": {"silhouette_score": None, "davies_bouldin_score": None},
         "visualization": [],
@@ -368,14 +375,24 @@ def cluster_detail(cluster_id):
     cluster = next((item for item in build_event_clusters(articles, use_saved_model=True) if item["cluster_id"] == cluster_id), None)
     if cluster is None:
         return "Cluster not found", 404
-    return render_template("cluster_detail.html", cluster=cluster)
+    return render_template("cluster_detail.html", cluster=cluster, query=query)
 
 
 @app.route("/article/<article_id>")
 def article_detail(article_id):
     query = request.args.get("q", "").strip()
+    article = _ARTICLE_CACHE.get(f"id:{article_id}")
     articles = load_articles(query=query)
-    article = next((item for item in articles if item["article_id"] == article_id), None)
+    if article is None:
+        article = next((item for item in articles if item["article_id"] == article_id), None)
+    if article is None:
+        for v in _ARTICLE_CACHE.values():
+            if isinstance(v, list):
+                found = next((item for item in v if isinstance(item, dict) and item.get("article_id") == article_id), None)
+                if found:
+                    article = found
+                    articles = v
+                    break
     if article is None:
         return "Article not found", 404
 

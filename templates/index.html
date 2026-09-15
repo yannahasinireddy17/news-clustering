@@ -96,7 +96,7 @@
             {% for cluster in clusters %}
             <article class="cluster-card">
               <div class="cluster-topline">
-                <a class="cluster-name" href="{{ url_for('cluster_detail', cluster_id=cluster.cluster_id) }}">{{ cluster.title }}</a>
+                <a class="cluster-name" href="{{ url_for('cluster_detail', cluster_id=cluster.cluster_id, q=query if query else None) }}">{{ cluster.title }}</a>
                 <span class="cluster-pill">{{ cluster.article_count }} articles</span>
               </div>
               <p class="cluster-summary">{{ cluster.summary }}</p>
@@ -118,10 +118,11 @@
           </div>
           <div class="source-grid">
             {% for article in articles %}
-            <div class="source-card">
+            <a class="source-card source-card-link" href="{{ url_for('article_detail', article_id=article.article_id, q=query) }}">
               <h3>{{ article.source }}</h3>
               <p>{{ article.title }}</p>
-            </div>
+              <p class="meta-line">{{ article.published_date }}</p>
+            </a>
             {% endfor %}
           </div>
         </aside>

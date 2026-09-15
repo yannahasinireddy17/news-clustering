@@ -6,14 +6,24 @@ import numpy as np
 
 
 TOPIC_KEYWORDS = {
-    "World": {"world", "country", "international", "war", "conflict", "border", "refugee", "diplomatic"},
-    "Technology": {"ai", "software", "technology", "chip", "cloud", "data", "internet"},
-    "Business": {"business", "market", "company", "investment", "economy", "trade", "stock"},
-    "Sports": {"sports", "game", "team", "match", "player", "league", "cricket", "football"},
-    "Politics": {"government", "president", "minister", "election", "policy", "parliament", "politics", "senate", "congress"},
-    "Entertainment": {"film", "movie", "music", "actor", "show", "entertainment", "celebrity"},
+    "Politics": {"government", "president", "minister", "election", "policy", "parliament", "politics", "senate", "congress", "vote", "campaign", "protest", "police", "migrant"},
+    "World": {"world", "country", "international", "border", "refugee", "diplomatic", "foreign", "global", "ukraine", "russia"},
+    "Business": {"business", "company", "economy", "trade", "commerce", "industry", "corporate", "job", "jobs"},
+    "Technology": {"ai", "software", "technology", "chip", "cloud", "data", "internet", "app", "digital"},
+    "Sports": {"sports", "game", "team", "match", "player", "league", "cricket", "football", "derby", "race", "points", "win", "winner"},
+    "Entertainment": {"film", "movie", "music", "actor", "show", "entertainment", "celebrity", "television", "tv", "oscar", "mafia", "singer", "royal"},
     "Science / Space / NASA": {"science", "scientist", "space", "nasa", "planet", "mars", "satellite", "astronomy", "research"},
-    "Health": {"health", "medical", "medicine", "hospital", "doctor", "disease", "cancer", "patient", "drug", "vaccine"},
+    "Health": {"health", "medical", "medicine", "hospital", "doctor", "disease", "cancer", "patient", "drug", "vaccine", "pain", "dental", "maternal"},
+    "Environment / Climate": {"environment", "climate", "warming", "emission", "pollution", "carbon", "drought", "flood", "wildfire", "fire", "conservation"},
+    "Education": {"education", "school", "student", "university", "college", "teacher", "classroom", "campus", "academic"},
+    "Research": {"research", "study", "discovery", "experiment", "laboratory", "researcher", "findings", "dna", "genetic"},
+    "Finance / Markets": {"finance", "financial", "stock", "stocks", "shares", "bank", "investor", "investors", "market", "markets", "fund", "dollar", "currency", "donor", "donation", "repay"},
+    "Defence": {"defence", "defense", "military", "army", "navy", "airforce", "missile", "troops", "weapon", "security"},
+    "Events / Awards": {"event", "award", "awards", "prize", "ceremony", "festival", "honor", "winner", "nominee"},
+    "Gaming": {"gaming", "video", "game", "console", "playstation", "xbox", "nintendo", "esports", "gamer"},
+    "Automotive": {"car", "cars", "automotive", "vehicle", "vehicles", "motor", "electric", "truck", "driver"},
+    "Travel": {"travel", "tourism", "tourist", "flight", "airline", "hotel", "holiday", "destination", "airport"},
+    "National / International Events": {"event", "summit", "conference", "olympics", "election", "parade", "celebration", "international"},
 }
 
 

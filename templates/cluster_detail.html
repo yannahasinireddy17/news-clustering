@@ -43,7 +43,7 @@
                 <span class="source-tag">{{ article.source }}</span>
                 <span class="cluster-pill">{{ article.event_label }}</span>
               </div>
-              <h3><a href="{{ url_for('article_detail', article_id=article.article_id) }}">{{ article.title }}</a></h3>
+              <h3><a href="{{ url_for('article_detail', article_id=article.article_id, q=query if query else None) }}">{{ article.title }}</a></h3>
               <p class="meta-line">{{ article.published_date }}</p>
               <p>{{ article.description or article.content }}</p>
               <button class="summarize-button" type="button" data-url="{{ article.url }}" data-title="{{ article.title }}" data-description="{{ article.description or article.content or '' }}">Summarize Article</button>

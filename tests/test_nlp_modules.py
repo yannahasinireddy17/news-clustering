@@ -1,6 +1,6 @@
 from app import select_related_articles, summarize_article, summarize_cluster
 from cluster_analysis import analyze_cluster
-from news_pipeline import run_news_pipeline
+from news_pipeline import refine_live_labels, run_news_pipeline
 from preprocessing import preprocess_text
 
 
@@ -67,6 +67,28 @@ def test_cluster_summary_filters_unrelated_article():
 def test_extended_topic_labels_are_supported():
     health, _ = analyze_cluster([{"processed_text": "doctor patient hospital vaccine disease"}])
     science, _ = analyze_cluster([{"processed_text": "nasa space mars satellite research"}])
+    finance, _ = analyze_cluster([{"processed_text": "investors stocks markets bank currency"}])
+    travel, _ = analyze_cluster([{"processed_text": "tourism flight hotel destination airport"}])
 
     assert health == "Health"
     assert science == "Science / Space / NASA"
+    assert finance == "Finance / Markets"
+    assert travel == "Travel"
+
+
+def test_unsupported_content_is_not_forced_into_a_topic():
+    label, _ = analyze_cluster([{"processed_text": "ordinary report with general information"}])
+
+    assert label == "News"
+
+
+def test_live_refinement_separates_supported_topics_without_fixed_clusters():
+    articles = [
+        {"processed_text": "president election government policy"},
+        {"processed_text": "football team league match player"},
+        {"processed_text": "nasa space mars satellite research"},
+    ]
+
+    labels = refine_live_labels(articles, [0, 0, 0])
+
+    assert len(set(labels.tolist())) == 3
